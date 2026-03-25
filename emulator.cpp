@@ -1,111 +1,104 @@
-#include <fstream>
-#include <vector>
-#include <string>
+#include "emulator.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <exception>
 #include <sstream>
-#include <iostream>
-#include <fstream>
-#include <optional>
+#include <vector>
+
+using std::string;
+using std::vector;
+
+bool ichar_eq(char left, char right) {
+  return std::tolower(left) == std::tolower(right);
+}
+
+bool istring_cmp(const string& left, const string& right) {
+  return (left.size() == right.size()) && std::equal(left.begin(), left.end(), right.begin(), ichar_eq);
+}
 
 namespace Emulator {
-  enum Reg {
-    R0, R1, R2, R3
-  };
-
-  class EmulatorState;
-
-  // TODO: implement all instructions listed in ISA. This class should be base class for all insturctions
-  class Instruction {
-  public:
-    virtual void eval(EmulatorState& emul) = 0;
-    virtual ~Instruction() {};
-  };
-
-  /* This function accepts the program written in the vrisc assembly
-   * If the input program is correct, returns sequence of insturction, corresponding to the input program.
-   * If the input text is incorrect, the behaviour is undefined
-   */
-  std::vector<Instruction*> parse(const std::string& program) {
-    // TODO: implement it!
-    // feel free to change signature of this function
-    return std::vector<Instruction*>{};
+  word emulate(const string& program) {
+    vector<Instruction*> code = parse(program);
+    int result                = emulate(code);
+    for (size_t i = 0; i < code.size(); i++) {
+      delete code[i];
+    }
+    return result;
   }
-  
-  struct EmulatorState {
-    static const size_t regs_size = 4;
-    static const size_t mem_size  = 1024;
 
-    std::vector<int> _registers{regs_size}; 
-    std::vector<int> _mem{mem_size};
-
-    size_t _pc = 0; // program counter register
-  };
-
-  /* Emulate receive a program, written in the vrisc assembly,
-   * in case of the correct program, emulate returns R0 value at the end of the emulation.
-   * If the program is incorrect, that is, either its text is not vrisc assembly language or it contains UB(endless cycles),
-   * the behaviour of emulate if also undefined. Handle these cases in any way.
-   */
-  int emulate(const std::string& program_text) {
-    // Feel free to change code of this function
-    std::vector<Instruction*> program = parse(program_text);
-
+  word emulate(const vector<Instruction*>& program) {
     EmulatorState state;
 
-    while (state._pc < program.size()) {
-      program[state._pc]->eval(state);
+    for (; state.pc < program.size(); state.pc++) {
+      program[state.pc]->eval(state);
     }
 
-    for (size_t i = 0; i < program.size(); i++) {
-      delete program[i];
+    return state.registers[static_cast<size_t>(R0)];
+  }
+
+  vector<Instruction*> parse(const string& program) {
+    std::stringstream ss(program);
+    vector<Instruction*> result;
+
+    string instr, left, right;
+    while (true) {
+      ss >> instr;
+      if (ss.eof())
+        break;
+      // I absolutely LOVE parsing. Definitely.
+      if (istring_cmp(instr, "mov")) {
+        ss >> left >> right;
+        if (std::tolower(right[0]) == 'r') {
+          result.push_back(new Instructions::MovReg(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<Reg>(std::stoi(right.substr(1)))));
+        } else {
+          result.push_back(new Instructions::MovImm(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+        }
+      } else if (istring_cmp(instr, "add")) {
+        ss >> left >> right;
+        if (std::tolower(right[0]) == 'r') {
+          result.push_back(new Instructions::AddReg(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<Reg>(std::stoi(right.substr(1)))));
+        } else {
+          result.push_back(new Instructions::AddImm(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+        }
+      } else if (istring_cmp(instr, "sub")) {
+        ss >> left >> right;
+        if (std::tolower(right[0]) == 'r') {
+          result.push_back(new Instructions::SubReg(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<Reg>(std::stoi(right.substr(1)))));
+        } else {
+          result.push_back(new Instructions::SubImm(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+        }
+      } else if (istring_cmp(instr, "mul")) {
+        ss >> left >> right;
+        if (std::tolower(right[0]) == 'r') {
+          result.push_back(new Instructions::MulReg(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<Reg>(std::stoi(right.substr(1)))));
+        } else {
+          result.push_back(new Instructions::MulImm(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+        }
+      } else if (istring_cmp(instr, "div")) {
+        ss >> left >> right;
+        if (std::tolower(right[0]) == 'r') {
+          result.push_back(new Instructions::DivReg(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<Reg>(std::stoi(right.substr(1)))));
+        } else {
+          result.push_back(new Instructions::DivImm(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+        }
+      } else if (istring_cmp(instr, "load")) {
+        ss >> left >> right;
+        result.push_back(new Instructions::Load(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+      } else if (istring_cmp(instr, "store")) {
+        ss >> left >> right;
+        result.push_back(new Instructions::Store(static_cast<Reg>(std::stoi(left.substr(1))), static_cast<word>(std::stoi(right))));
+      } else if (istring_cmp(instr, "jmp")) {
+        ss >> left;
+        result.push_back(new Instructions::Jmp(static_cast<word>(std::stoi(left))));
+      } else if (istring_cmp(instr, "jmpz")) {
+        ss >> left;
+        result.push_back(new Instructions::Jmpz(static_cast<word>(std::stoi(left))));
+      } else {
+        throw std::exception();
+      }
     }
 
-    return state._registers[R0];
+    return result;
   }
-}
-
-// Simple helper for file as single line. Feel free to change it or delete it completely
-std::optional<std::string> readStringFromFile(const std::string& filename) {
-  std::ifstream file{filename};
-
-  if (!file) return {};
-
-  std::stringstream buf;
-  buf << file.rdbuf();
-
-  return buf.str();
-}
-
-int main() {
-  // For writing test you can write programs directly in raw string literals
-  std::string factorial = R"(
-    Mov R0 5
-    Mov R1 1    
-    Mov Jmpz 6  
-                  
-    Mul R1 R0   
-    Sub R0 1    
-    Jmp 2       
-
-    Mov R0 R1
-  )";
-
-  // The result should be 120
-  int fact5 = Emulator::emulate(factorial);
-
-  
-  // Or you can use file IO
-  std::string filename = "factorial.vrisc";
-  std::optional<std::string> program = readStringFromFile("factorial.vrisc");
-
-  if (!program) {
-    std::cerr << "Can't open file" << std::endl;
-    return 1;
-  }
-
-  // And this also should be 120
-  int another_fact = Emulator::emulate(*program);
-
-  // TODO: remeber the tests is very important!
-
-  return 0;
-}
+} // namespace Emulator

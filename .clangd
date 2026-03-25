@@ -1,0 +1,15 @@
+Completion:
+  ArgumentLists: Delimiters
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+  Designators: true
+  BlockEnd: false
+  DefaultArguments: false
+  TypeNameLimit: 24
+
+
+CompileFlags:   
+  Add: [-std=c++20, -Wall, -Wextra, -Wpedantic]
